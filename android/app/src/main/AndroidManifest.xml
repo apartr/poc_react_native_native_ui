@@ -2,6 +2,10 @@
   package="com.rn_version_0_70_12_native_ui">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+      android:maxSdkVersion="28" />
 
     <application
       android:name=".MainApplication"

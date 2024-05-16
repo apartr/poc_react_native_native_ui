@@ -5730,6 +5730,16 @@ react-native-gradle-plugin@^0.70.3:
   resolved "https://registry.yarnpkg.com/react-native-gradle-plugin/-/react-native-gradle-plugin-0.70.3.tgz#cbcf0619cbfbddaa9128701aa2d7b4145f9c4fc8"
   integrity sha512-oOanj84fJEXUg9FoEAQomA8ISG+DVIrTZ3qF7m69VQUJyOGYyDZmPqKcjvRku4KXlEH6hWO9i4ACLzNBh8gC0A==
 
+react-native-permissions@3.9:
+  version "3.9.3"
+  resolved "https://registry.yarnpkg.com/react-native-permissions/-/react-native-permissions-3.9.3.tgz#b12b118634437784205b5fd56c2a7edd69707314"
+  integrity sha512-2UqG2Em4xHxLq0E1XynXMdQ//XZltxVUjTn/i4fPIZuuZ0cQ+ydAQmLXqDPxOXvG0sICwc3oe0orJmQdqpa1sQ==
+
+react-native-vision-camera@2:
+  version "2.16.8"
+  resolved "https://registry.yarnpkg.com/react-native-vision-camera/-/react-native-vision-camera-2.16.8.tgz#4873b0cb62ad04ca442a08b9e34f5883b35a6418"
+  integrity sha512-DCYkhxHw0p8dftfYxkfyeECraPOCliNWriVUTe+qit16ejs9fXoW1zXJBq48UbysUTuIOk8QwTn9OSy4jhGvTg==
+
 react-native@0.70.12:
   version "0.70.12"
   resolved "https://registry.yarnpkg.com/react-native/-/react-native-0.70.12.tgz#9efe39decda4f867089b0d67fdfb41ed238de45a"

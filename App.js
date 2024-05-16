@@ -1,117 +1,140 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- * @flow strict-local
- */
+import React, {useEffect, useRef, useState} from 'react';
 
-import React from 'react';
-import type {Node} from 'react';
+import CameraPreview from './components/CameraPreview';
+import {PERMISSIONS, check, request} from 'react-native-permissions';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
+  View,
+  TouchableOpacity,
+  NativeEventEmitter,
+  NativeModules,
   StyleSheet,
   Text,
-  useColorScheme,
-  View,
+  UIManager,
+  findNodeHandle,
 } from 'react-native';
+import {Camera, useCameraDevices} from 'react-native-vision-camera';
+// import {NativeModules} from "react-native"
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+// const createFragment = viewId =>
+//   UIManager.dispatchViewManagerCommand(
+//     viewId,
+//     // we are calling the 'create' command
+//     UIManager.MyViewManager.Commands.create.toString(),
+//     [viewId],
+//   );
 
-/* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
- * LTI update could not be added via codemod */
-const Section = ({children, title}): Node => {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-};
+const App = () => {
+  const [allowToRender, setAllowToRender] = useState(false);
+  const devices = useCameraDevices();
+  const device = devices.front;
+  // const {hasPermission} = useCameraPermission();
 
-const App: () => Node = () => {
-  const isDarkMode = useColorScheme() === 'dark';
+  const cameraRef = useRef(null);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  // useEffect(() => {
+  //   // Start the camera
+  //   cameraRef.current.startCamera();
+
+  //   // Listen for image captured event
+  //   const eventEmitter = new NativeEventEmitter(NativeModules.CameraView);
+  //   eventEmitter.addListener('onImageCaptured', handleImageCaptured);
+
+  //   return () => {
+  //     // Clean up event listener
+  //     eventEmitter.removeListener('onImageCaptured', handleImageCaptured);
+  //   };
+  // }, []);
+
+  const handleImageCaptured = base64Image => {
+    console.log('Image captured:', base64Image);
+    // Handle base64 image data
   };
 
-  return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.js</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-};
+  useEffect(() => {
+    check(PERMISSIONS.ANDROID.CAMERA).then(response => {
+      console.log('response', response);
+      if (response === 'granted') {
+        setAllowToRender(true);
+      } else {
+        request(PERMISSIONS.ANDROID.CAMERA).then(response2 => {
+          console.log(response2);
+          if (response2 === 'granted') {
+            setAllowToRender(true);
+          }
+        });
+      }
+    });
+  }, []);
 
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+  if (!allowToRender) {
+    return null;
+  }
+
+  if (device == null) {
+    return null;
+  }
+
+  const multiple = 10;
+  const style = {
+    width: 30 * multiple,
+    height: 40 * multiple,
+    backgroundColor: 'lightgrey',
+  };
+  // const style = StyleSheet.absoluteFill;
+
+  // console.log('device', device);
+  const oldLibs = 0;
+
+  // const SomeAction = () => {
+  //   cameraRef.current.startCamera()
+  //   // Get FaceTec
+
+  //   cameraRef.current.dataSet({
+  //     action: turn_left,
+  //     duration: 3
+  //   })
+
+  //   cameraRef.current.validateDataSet()
+  // }
+
+  if (oldLibs) {
+    return (
+      <View style={{flex: 1}}>
+        <Camera style={style} device={device} isActive={true} photo={true} />
+      </View>
+    );
+  } else {
+    return (
+      <View
+        style={{
+          flex: 1,
+        }}>
+        <CameraPreview
+          ref={cameraRef}
+          style={[style]}
+          onChange={event => {
+            // console.log(
+            //   'event.nativeEvent.message',
+            //   event.nativeEvent.message?.MOUTH_BOTTOM_X,
+            //   event.nativeEvent.message?.MOUTH_BOTTOM_Y,
+            // );
+          }}
+        />
+        <TouchableOpacity
+          style={{borderWidth: 1, padding: 30}}
+          onPress={() => {
+            // cameraRef.current?.captureImage();
+            // console.log('cameraRef', cameraRef.current?.captureImage());
+            // NativeModules.TestView.testMethod(
+            //   findNodeHandle(cameraRef.current),
+            // );
+            console.log('cameraRef', NativeModules.CameraPreview.testMethod());
+          }}>
+          <Text>{'TEST 1'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+};
 
 export default App;
