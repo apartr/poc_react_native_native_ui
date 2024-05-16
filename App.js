@@ -75,9 +75,17 @@ const App = () => {
   }
 
   const multiple = 10;
+  const fullScreen = {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+  };
   const style = {
-    width: 30 * multiple,
-    height: 40 * multiple,
+    // width: 30 * multiple,
+    // height: 40 * multiple,
+    ...fullScreen,
     backgroundColor: 'lightgrey',
   };
   // const style = StyleSheet.absoluteFill;

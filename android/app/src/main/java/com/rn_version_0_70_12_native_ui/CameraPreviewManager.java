@@ -34,7 +34,12 @@ public class CameraPreviewManager extends SimpleViewManager<CameraPreview> {
     @NonNull
     @Override
     protected CameraPreview createViewInstance(@NonNull ThemedReactContext reactContext) {
-        return new CameraPreview(reactContext);
+        FragmentActivity activity = (FragmentActivity) reactContext.getCurrentActivity();
+        if (activity != null) {
+            return new CameraPreview(reactContext, activity);
+        } else {
+            throw new IllegalStateException("Activity is null");
+        }
     }
 
     public Map getExportedCustomBubblingEventTypeConstants() {
