@@ -1,29 +1,26 @@
 package com.rn_version_0_70_12_native_ui;
 
-import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
-import androidx.fragment.app.FragmentActivity;
-import androidx.fragment.app.FragmentManager;
-import androidx.lifecycle.LifecycleOwner;
 
-import com.facebook.drawee.backends.pipeline.Fresco;
+import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.common.MapBuilder;
-import com.facebook.react.uimanager.SimpleViewManager;
+import com.facebook.react.uimanager.LayoutShadowNode;
 import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.uimanager.ViewGroupManager;
 
-import java.util.Map;
-
-public class CameraPreviewManager extends SimpleViewManager<CameraPreview> {
+public class CameraPreviewManager extends ViewGroupManager<FrameLayout> implements LifecycleEventListener {
     public static final String REACT_CLASS = "CameraPreview";
-    ReactApplicationContext mCallerContext;
+    private final ReactApplicationContext reactContext;
+    private CameraPreview cameraPreview;
 
     public CameraPreviewManager(ReactApplicationContext reactContext) {
-        mCallerContext = reactContext;
+        this.reactContext = reactContext;
+        reactContext.addLifecycleEventListener(this);
     }
 
     @Override
@@ -33,28 +30,89 @@ public class CameraPreviewManager extends SimpleViewManager<CameraPreview> {
 
     @NonNull
     @Override
-    protected CameraPreview createViewInstance(@NonNull ThemedReactContext reactContext) {
-        FragmentActivity activity = (FragmentActivity) reactContext.getCurrentActivity();
-        if (activity != null) {
-            return new CameraPreview(reactContext, activity);
-        } else {
-            throw new IllegalStateException("Activity is null");
+    protected FrameLayout createViewInstance(@NonNull ThemedReactContext reactContext) {
+        FrameLayout frameLayout = new FrameLayout(reactContext);
+        frameLayout.setId(View.generateViewId());
+
+        // Initialize CameraPreview
+        cameraPreview = new CameraPreview(reactContext);
+        frameLayout.addView(cameraPreview);
+
+        // Ensure the CameraPreview is laid out correctly
+        frameLayout.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                frameLayout.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                setupLayout(frameLayout);
+            }
+        });
+
+        return frameLayout;
+    }
+
+    private void setupLayout(FrameLayout frameLayout) {
+        frameLayout.post(new Runnable() {
+            @Override
+            public void run() {
+                manuallyLayoutChildren(frameLayout);
+                frameLayout.getViewTreeObserver().dispatchOnGlobalLayout();
+            }
+        });
+    }
+
+    private void manuallyLayoutChildren(View view) {
+        int width = view.getMeasuredWidth();
+        int height = view.getMeasuredHeight();
+
+        view.measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+
+        view.layout(0, 0, width, height);
+    }
+
+    @Override
+    public void onHostResume() {
+        if (cameraPreview != null) {
+            cameraPreview.startBackgroundThread();
+            if (cameraPreview.textureView.isAvailable()) {
+                cameraPreview.openCamera();
+            } else {
+                cameraPreview.textureView.setSurfaceTextureListener(cameraPreview.surfaceTextureListener);
+            }
         }
     }
 
-    public Map getExportedCustomBubblingEventTypeConstants() {
-        return MapBuilder.builder().put(
-                "topChange",
-                MapBuilder.of(
-                        "phasedRegistrationNames",
-                        MapBuilder.of("bubbled", "onChange")
-                )
-        ).build();
+    @Override
+    public void onHostPause() {
+        if (cameraPreview != null) {
+            cameraPreview.closeCamera();
+            cameraPreview.stopBackgroundThread();
+        }
     }
 
-    @ReactMethod
-    public void testMethod() {
-        Log.d("TEST", "TEST");
-        // Implement capturing image here
+    @Override
+    public void onHostDestroy() {
+        // Handle any cleanup if necessary
+        if (cameraPreview != null) {
+            cameraPreview.closeCamera();
+            cameraPreview.stopBackgroundThread();
+        }
+    }
+
+    @Override
+    public void onAfterUpdateTransaction(@NonNull FrameLayout view) {
+        super.onAfterUpdateTransaction(view);
+        view.requestLayout();
+    }
+
+    @Override
+    public LayoutShadowNode createShadowNodeInstance() {
+        return new LayoutShadowNode();
+    }
+
+    @Override
+    public Class<? extends LayoutShadowNode> getShadowNodeClass() {
+        return LayoutShadowNode.class;
     }
 }

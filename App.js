@@ -85,6 +85,7 @@ const App = () => {
   const style = {
     // width: 30 * multiple,
     // height: 40 * multiple,
+    // flex: 1,
     ...fullScreen,
     backgroundColor: 'lightgrey',
   };

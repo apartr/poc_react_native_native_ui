@@ -1,183 +1,212 @@
 package com.rn_version_0_70_12_native_ui;
 
+import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.ImageFormat;
-import android.graphics.Matrix;
-import android.graphics.Rect;
-import android.graphics.YuvImage;
-import android.util.AttributeSet;
+import android.content.pm.PackageManager;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.util.Log;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
-import android.view.ViewGroup;
+import android.view.Surface;
+import android.view.TextureView;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.camera.core.CameraSelector;
-import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageProxy;
-import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.core.content.ContextCompat;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.LifecycleObserver;
+import androidx.core.app.ActivityCompat;
 
-import com.google.common.util.concurrent.ListenableFuture;
+import java.util.Arrays;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutionException;
-
-public class CameraPreview extends FrameLayout implements LifecycleObserver, ImageAnalysis.Analyzer, SurfaceHolder.Callback {
+public class CameraPreview extends FrameLayout {
     private static final String TAG = "CameraPreview";
-    private SurfaceView surfaceView;
-    private LifecycleOwner lifecycleOwner;
-    private ImageAnalysis imageAnalysis;
-    private boolean isSurfaceReady = false;
+    private static final int CAMERA_PERMISSION_REQUEST_CODE = 200;
 
-    public CameraPreview(@NonNull Context context, LifecycleOwner lifecycleOwner) {
-        this(context, null, lifecycleOwner);
-    }
+    TextureView textureView;
+    private CameraDevice cameraDevice;
+    private CaptureRequest.Builder captureRequestBuilder;
+    private CameraCaptureSession cameraCaptureSession;
+    private Handler backgroundHandler;
+    private HandlerThread backgroundThread;
 
-    public CameraPreview(@NonNull Context context, @Nullable AttributeSet attrs, LifecycleOwner lifecycleOwner) {
-        this(context, attrs, 0, lifecycleOwner);
-    }
-
-    public CameraPreview(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr, LifecycleOwner lifecycleOwner) {
-        super(context, attrs, defStyleAttr);
-        this.lifecycleOwner = lifecycleOwner;
+    public CameraPreview(Context context) {
+        super(context);
         init(context);
-        lifecycleOwner.getLifecycle().addObserver(this);
     }
 
     private void init(Context context) {
-        Log.d(TAG, "Initializing CameraPreview");
-        surfaceView = new SurfaceView(context);
-        this.addView(surfaceView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        surfaceView.getHolder().addCallback(this);
+        textureView = new TextureView(context);
+        textureView.setSurfaceTextureListener(surfaceTextureListener);
+        addView(textureView);
+    }
 
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(context);
-        cameraProviderFuture.addListener(() -> {
-            try {
-                Log.d(TAG, "Getting ProcessCameraProvider");
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                bindCameraUseCases(cameraProvider);
-            } catch (ExecutionException | InterruptedException e) {
-                Log.e(TAG, "Error getting ProcessCameraProvider", e);
+    final TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+            openCamera();
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {}
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {}
+    };
+
+    void openCamera() {
+        CameraManager manager = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+        try {
+            if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        (Activity) getContext(),
+                        new String[]{Manifest.permission.CAMERA},
+                        CAMERA_PERMISSION_REQUEST_CODE
+                );
+                return;
             }
-        }, ContextCompat.getMainExecutor(context));
+            String cameraId = getFrontFacingCameraId(manager);
+            if (cameraId != null) {
+                manager.openCamera(cameraId, stateCallback, backgroundHandler);
+            } else {
+                Log.e(TAG, "No front-facing camera found");
+            }
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "CameraAccessException: " + e.getMessage());
+        }
     }
 
-    private void bindCameraUseCases(@NonNull ProcessCameraProvider cameraProvider) {
-        Log.d(TAG, "Binding camera use cases");
-
-        imageAnalysis = new ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build();
-        imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(getContext()), this);
-
-        CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
-                .build();
-
-        cameraProvider.unbindAll();
-        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageAnalysis);
-        Log.d(TAG, "Camera use cases bound to lifecycle");
+    private String getFrontFacingCameraId(CameraManager manager) throws CameraAccessException {
+        for (String cameraId : manager.getCameraIdList()) {
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                return cameraId;
+            }
+        }
+        return null;
     }
 
-    @Override
-    public void analyze(@NonNull ImageProxy image) {
-        if (!isSurfaceReady) {
-            image.close();
+    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            cameraDevice = camera;
+            startPreview();
+        }
+
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            camera.close();
+            cameraDevice = null;
+        }
+
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            camera.close();
+            cameraDevice = null;
+        }
+    };
+
+    private void startPreview() {
+        if (cameraDevice == null || !textureView.isAvailable()) {
             return;
         }
 
-        Log.d(TAG, "Analyzing image");
-        // Convert ImageProxy to Bitmap
-        Bitmap bitmap = imageProxyToBitmap(image);
-        image.close();
+        try {
+            SurfaceTexture texture = textureView.getSurfaceTexture();
+            assert texture != null;
+            texture.setDefaultBufferSize(textureView.getWidth(), textureView.getHeight());
+            Surface surface = new Surface(texture);
 
-        // Rotate and flip the Bitmap to correct orientation
-        Bitmap rotatedBitmap = rotateAndFlipBitmap(bitmap, image.getImageInfo().getRotationDegrees());
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            captureRequestBuilder.addTarget(surface);
 
-        // Draw the Bitmap on the SurfaceView
-        if (rotatedBitmap != null) {
-            SurfaceHolder holder = surfaceView.getHolder();
-            Canvas canvas = holder.lockCanvas();
-            if (canvas != null) {
-                drawBitmapFullScreen(canvas, rotatedBitmap);
-                holder.unlockCanvasAndPost(canvas);
-            }
+            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    if (cameraDevice == null) {
+                        return;
+                    }
+
+                    cameraCaptureSession = session;
+                    updatePreview();
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {}
+            }, backgroundHandler);
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "CameraAccessException: " + e.getMessage());
         }
     }
 
-    private void drawBitmapFullScreen(Canvas canvas, Bitmap bitmap) {
-        Matrix matrix = new Matrix();
-        float scaleX = (float) canvas.getWidth() / bitmap.getWidth();
-        float scaleY = (float) canvas.getHeight() / bitmap.getHeight();
-        float scale = Math.max(scaleX, scaleY);
-        float dx = (canvas.getWidth() - bitmap.getWidth() * scale) / 2f;
-        float dy = (canvas.getHeight() - bitmap.getHeight() * scale) / 2f;
-        matrix.postScale(scale, scale);
-        matrix.postTranslate(dx, dy);
-        canvas.drawBitmap(bitmap, matrix, null);
-    }
+    private void updatePreview() {
+        if (cameraDevice == null) {
+            return;
+        }
 
-    private Bitmap imageProxyToBitmap(ImageProxy image) {
-        byte[] nv21 = getNv21(image);
-
-        YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, image.getWidth(), image.getHeight(), null);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        yuvImage.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 100, out);
-        byte[] imageBytes = out.toByteArray();
-        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-    }
-
-    @NonNull
-    private static byte[] getNv21(ImageProxy image) {
-        ImageProxy.PlaneProxy[] planes = image.getPlanes();
-        ByteBuffer yBuffer = planes[0].getBuffer();
-        ByteBuffer uBuffer = planes[1].getBuffer();
-        ByteBuffer vBuffer = planes[2].getBuffer();
-
-        int ySize = yBuffer.remaining();
-        int uSize = uBuffer.remaining();
-        int vSize = vBuffer.remaining();
-
-        byte[] nv21 = new byte[ySize + uSize + vSize];
-
-        yBuffer.get(nv21, 0, ySize);
-        vBuffer.get(nv21, ySize, vSize);
-        uBuffer.get(nv21, ySize + vSize, uSize);
-        return nv21;
-    }
-
-    private Bitmap rotateAndFlipBitmap(Bitmap bitmap, int rotationDegrees) {
-        Matrix matrix = new Matrix();
-        // Flip horizontally
-        matrix.postScale(1, -1);
-        // Rotate
-        matrix.postRotate(rotationDegrees);
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+        try {
+            cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "CameraAccessException: " + e.getMessage());
+        }
     }
 
     @Override
-    public void surfaceCreated(SurfaceHolder holder) {
-        isSurfaceReady = true;
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        startBackgroundThread();
+        if (textureView.isAvailable()) {
+            openCamera();
+        } else {
+            textureView.setSurfaceTextureListener(surfaceTextureListener);
+        }
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        isSurfaceReady = true;
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        closeCamera();
+        stopBackgroundThread();
     }
 
-    @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
-        isSurfaceReady = false;
+    void closeCamera() {
+        if (cameraCaptureSession != null) {
+            cameraCaptureSession.close();
+            cameraCaptureSession = null;
+        }
+        if (cameraDevice != null) {
+            cameraDevice.close();
+            cameraDevice = null;
+        }
     }
 
-    // Add other lifecycle event methods as needed
+    void startBackgroundThread() {
+        backgroundThread = new HandlerThread("CameraBackground");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
+    void stopBackgroundThread() {
+        if (backgroundThread != null) {
+            backgroundThread.quitSafely();
+            try {
+                backgroundThread.join();
+                backgroundThread = null;
+                backgroundHandler = null;
+            } catch (InterruptedException e) {
+                Log.e(TAG, "InterruptedException: " + e.getMessage());
+            }
+        }
+    }
 }
