@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 import CameraPreview from './components/CameraPreview';
 import {PERMISSIONS, check, request} from 'react-native-permissions';
@@ -11,6 +11,7 @@ import {
   Text,
   UIManager,
   findNodeHandle,
+  Image,
 } from 'react-native';
 import {Camera, useCameraDevices} from 'react-native-vision-camera';
 // import {NativeModules} from "react-native"
@@ -25,6 +26,7 @@ import {Camera, useCameraDevices} from 'react-native-vision-camera';
 
 const App = () => {
   const [allowToRender, setAllowToRender] = useState(false);
+  const [previewImage, setPreviewImage] = useState(false);
   const devices = useCameraDevices();
   const device = devices.front;
   // const {hasPermission} = useCameraPermission();
@@ -66,6 +68,11 @@ const App = () => {
     });
   }, []);
 
+  const handleTakeSnapshot = useCallback(async () => {
+    const photo = await cameraRef.current?.takeSnapshot();
+    setPreviewImage('file://' + photo.path);
+  }, []);
+
   if (!allowToRender) {
     return null;
   }
@@ -92,7 +99,7 @@ const App = () => {
   // const style = StyleSheet.absoluteFill;
 
   // console.log('device', device);
-  const oldLibs = 0;
+  const oldLibs = 1;
 
   // const SomeAction = () => {
   //   cameraRef.current.startCamera()
@@ -106,44 +113,87 @@ const App = () => {
   //   cameraRef.current.validateDataSet()
   // }
 
-  if (oldLibs) {
+  if (previewImage) {
     return (
       <View style={{flex: 1}}>
-        <Camera style={style} device={device} isActive={true} photo={true} />
-      </View>
-    );
-  } else {
-    return (
-      <View
-        style={{
-          flex: 1,
-        }}>
-        <CameraPreview
-          ref={cameraRef}
-          style={[style]}
-          onChange={event => {
-            // console.log(
-            //   'event.nativeEvent.message',
-            //   event.nativeEvent.message?.MOUTH_BOTTOM_X,
-            //   event.nativeEvent.message?.MOUTH_BOTTOM_Y,
-            // );
-          }}
-        />
-        <TouchableOpacity
-          style={{borderWidth: 1, padding: 30}}
-          onPress={() => {
-            // cameraRef.current?.captureImage();
-            // console.log('cameraRef', cameraRef.current?.captureImage());
-            // NativeModules.TestView.testMethod(
-            //   findNodeHandle(cameraRef.current),
-            // );
-            console.log('cameraRef', NativeModules.CameraPreview.testMethod());
-          }}>
-          <Text>{'TEST 1'}</Text>
-        </TouchableOpacity>
+        <Image source={{uri: previewImage}} style={{flex: 1}} />
+        <View style={{position: 'absolute', left: 0, bottom: 0, right: 0}}>
+          <TouchableOpacity
+            style={{
+              borderWidth: 1,
+              padding: 30,
+              backgroundColor: 'black',
+              alignItems: 'center',
+            }}
+            onPress={() => setPreviewImage('')}>
+            <Text style={{color: 'red', fontWeight: 'bold'}}>
+              {'Re-Take Snapshot'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
+
+  return (
+    <View style={{flex: 1}}>
+      <Camera
+        ref={cameraRef}
+        style={style}
+        device={device}
+        isActive={true}
+        photo={true}
+      />
+      <View style={{flex: 1}} />
+      <TouchableOpacity
+        style={{
+          borderWidth: 1,
+          padding: 30,
+          backgroundColor: 'black',
+          alignItems: 'center',
+        }}
+        onPress={handleTakeSnapshot}>
+        <Text style={{color: 'green', fontWeight: 'bold'}}>
+          {'Take Snapshot'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // if (oldLibs) {
+
+  // } else {
+  //   return (
+  //     <View
+  //       style={{
+  //         flex: 1,
+  //       }}>
+  //       <CameraPreview
+  //         ref={cameraRef}
+  //         style={[style]}
+  //         onChange={event => {
+  //           // console.log(
+  //           //   'event.nativeEvent.message',
+  //           //   event.nativeEvent.message?.MOUTH_BOTTOM_X,
+  //           //   event.nativeEvent.message?.MOUTH_BOTTOM_Y,
+  //           // );
+  //         }}
+  //       />
+  //       <TouchableOpacity
+  //         style={{borderWidth: 1, padding: 30}}
+  //         onPress={() => {
+  //           // cameraRef.current?.captureImage();
+  //           // console.log('cameraRef', cameraRef.current?.captureImage());
+  //           // NativeModules.TestView.testMethod(
+  //           //   findNodeHandle(cameraRef.current),
+  //           // );
+  //           console.log('cameraRef', NativeModules.CameraPreview.testMethod());
+  //         }}>
+  //         <Text>{'TEST 1'}</Text>
+  //       </TouchableOpacity>
+  //     </View>
+  //   );
+  // }
 };
 
 export default App;
